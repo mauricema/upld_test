@@ -70,12 +70,24 @@ def clone_repo (clone_dir, repo, branch, commit = 'HEAD'):
         fatal ('Failed to check out specified branch !')
     print ('Done\n')
 
+    cmd = 'git submodule init'
+    ret = subprocess.call(cmd.split(' '), cwd=clone_dir)
+    if ret:
+        fatal ('Failed to init submodules !')
+    print ('Done\n')
+
+    cmd = 'git submodule update'
+    ret = subprocess.call(cmd.split(' '), cwd=clone_dir)
+    if ret:
+        fatal ('Failed to update submodules !')
+    print ('Done\n')
+
     cmd = 'git pull'
     ret = subprocess.call(cmd.split(' '), cwd=clone_dir)
     if ret:
-        fatal ('Failed to pull commit !')
-    print ('Done\n')
+        fatal ('Failed to pull latest code !')
 
+    print ('Done\n')
 
 def get_objcopy ():
     objcopy = 'llvm-objcopy-10'
@@ -119,9 +131,9 @@ def qemu_test ():
     test_cases = [
       #('sbl_upld.py',  [tst_img, disk_dir, 'uboot_32'], 'Uboot.elf'),
       ('sbl_upld.py',  [tst_img, disk_dir, 'linux_32'], 'LinuxPld32.elf'),
-      #('sbl_upld.py',  [tst_img, disk_dir, 'linux_64'], 'LinuxPld64.elf'),
-      #('sbl_upld.py',  [tst_img, disk_dir, 'uefi_32'], 'UefiPld32.elf'),
-      #('sbl_upld.py',  [tst_img, disk_dir, 'uefi_64'], 'UefiPld64.elf'),
+      ('sbl_upld.py',  [tst_img, disk_dir, 'linux_64'], 'LinuxPld64.elf'),
+      ('sbl_upld.py',  [tst_img, disk_dir, 'uefi_32'], 'UefiPld32.elf'),
+      ('sbl_upld.py',  [tst_img, disk_dir, 'uefi_64'], 'UefiPld64.elf'),
     ]
 
     test_cnt = 0
@@ -151,19 +163,19 @@ def qemu_test ():
     return 0
 
 
-def build_images ():
+def build_sbl_images (dir_dict):
 
     if os.name != 'posix':
         fatal ('Only Linux is supported!')
 
-    out_dir = 'Outputs'
+    out_dir = dir_dict['out']
     if not os.path.exists(out_dir):
         os.mkdir(out_dir)
 
-    sbl_dir = 'SlimBoot'
+    sbl_dir = dir_dict['sbl']
     clone_repo  (sbl_dir, 'https://github.com/universalpayload/slimbootloader.git', 'upld_elf')
-    shutil.copy ('QemuFspBins/Fsp.bsf', 'SlimBoot/Silicon/QemuSocPkg/FspBin/Fsp.bsf')
-    shutil.copy ('QemuFspBins/FspRel.bin', 'SlimBoot/Silicon/QemuSocPkg/FspBin/FspRel.bin')
+    shutil.copy ('QemuFspBins/Fsp.bsf', '%s/Silicon/QemuSocPkg/FspBin/Fsp.bsf' % sbl_dir)
+    shutil.copy ('QemuFspBins/FspRel.bin', '%s/Silicon/QemuSocPkg/FspBin/FspRel.bin' % sbl_dir)
 
     # Build SBL
     cmd = 'python BuildLoader.py build qemu -k'
@@ -207,13 +219,54 @@ def build_images ():
     return 0
 
 
-def main ():
 
-    if build_images ():
+def build_uefi_images (dir_dict):
+    objcopy = get_objcopy()
+
+    out_dir  = dir_dict['out']
+    uefi_dir = dir_dict['uefi']
+    clone_repo  (uefi_dir, 'https://github.com/universalpayload/edk2.git', 'upld_elf')
+
+    # Build UEFI
+    for target in ['32', '64']:
+        cmd = 'python BuildPayload.py build'
+        if target == '64':
+            cmd += ' -a x64'
+            fmt  = 'elf64-x86-64'
+        else:
+            fmt  = 'elf32-i386'
+        ret = subprocess.call(cmd.split(' '), cwd=uefi_dir)
+        if ret:
+            fatal ('Failed to build SBL!')
+        shutil.copy ('%s/Build/UefiPayloadPkg/DEBUG_GCC5/FV/UefiPld%s.elf' % (uefi_dir, target),  '%s/UefiPld%s.elf' % (out_dir, target))
+        shutil.copy ('%s/Build/UefiPayloadPkg/DEBUG_GCC5/FV/DXEFV.Fv' % uefi_dir,  '%s/DXEFV%s.fv' % (out_dir, target))
+
+        # Inject sections
+        cmd = 'python Script/upld_info.py %s/upld_info.bin UEFI%s' % (out_dir, target)
+        run_process (cmd.split(' '))
+        bin_fmt = " -I %s -O %s" % (fmt, fmt)
+        cmd = objcopy + bin_fmt + " --add-section .upld_info=%s/upld_info.bin --add-section .upld.uefi_fv=%s/DXEFV32.fv %s/UefiPld%s.elf" % (out_dir, out_dir, out_dir, target)
+        run_process (cmd.split(' '))
+        cmd = objcopy + bin_fmt + " --set-section-alignment .upld.info=16 --set-section-alignment .upld.uefi_fv=4096 %s/UefiPld%s.elf" % (out_dir, target)
+        run_process (cmd.split(' '))
+
+    return 0
+
+
+def main ():
+    dir_dict = {}
+    dir_dict['out']  = 'Outputs'
+    dir_dict['sbl']  = 'SlimBoot'
+    dir_dict['uefi'] = 'UefiPayload'
+
+    if build_sbl_images (dir_dict):
         return 1
 
-    if qemu_test ():
+    if build_uefi_images (dir_dict):
         return 2
+
+    if qemu_test ():
+        return 3
 
     return 0
 
