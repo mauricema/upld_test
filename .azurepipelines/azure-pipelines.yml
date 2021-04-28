@@ -5,6 +5,13 @@
 # SPDX-License-Identifier: BSD-2-Clause-Patent
 ##
 
+schedules:
+- cron: "0 0 * * *"
+  displayName: Daily midnight test
+  branches:
+    include:
+    - master
+
 trigger:
 - master
 
