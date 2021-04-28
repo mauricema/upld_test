@@ -39,8 +39,8 @@ def run_qemu (bios_img, fwu_path, fwu_mode=False, timeout=0):
     else:
         path = r"qemu-system-x86_64"
     cmd_list = [
-        path, "-nographic",  "-machine", "q35,accel=tcg",
-        "-cpu", "max", "-serial", "mon:stdio",
+        path, "-nographic", "-machine", "q35,accel=tcg",
+        "-serial", "mon:stdio",
         "-m", "256M", "-drive",
         "id=mydrive,if=none,format=raw,file=fat:rw:%s" % fwu_path, "-device",
         "ide-hd,drive=mydrive", "-boot", "order=d%s" % ('an' if fwu_mode else ''),

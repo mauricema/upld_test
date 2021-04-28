@@ -1,8 +1,9 @@
 #!/usr/bin/env python
-## @ BuildLoader.py
-# Build bootloader main script
+## @ upld_info.py
 #
-# Copyright (c) 2016 - 2020, Intel Corporation. All rights reserved.<BR>
+# Universal Payload info header generator
+#
+# Copyright (c) 2021, Intel Corporation. All rights reserved.<BR>
 #  SPDX-License-Identifier: BSD-2-Clause-Patent
 
 ##

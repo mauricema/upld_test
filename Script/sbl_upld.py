@@ -1,9 +1,7 @@
 #!/usr/bin/env python
-## @ linux_boot.py
+## @ sbl_upld.py
 #
-# Test boot linux on QEMU
-#
-# Copyright (c) 2020, Intel Corporation. All rights reserved.<BR>
+# Copyright (c) 2021, Intel Corporation. All rights reserved.<BR>
 # SPDX-License-Identifier: BSD-2-Clause-Patent
 #
 ##
@@ -21,7 +19,7 @@ def get_check_lines (pld_name):
     elif pld_name.startswith('uefi'):
         name = 'UEFI'
     elif pld_name.startswith('linux'):
-        name = 'linux'
+        name = 'Linux'
     else:
         name = 'unknown'
 

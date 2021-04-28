@@ -10,6 +10,7 @@ import os
 import sys
 import shutil
 import subprocess
+import fnmatch
 
 def fatal (msg):
     sys.stdout.flush()
@@ -89,7 +90,68 @@ def get_objcopy ():
     return objcopy
 
 
-def main ():
+def qemu_test ():
+    if len(sys.argv) > 1:
+        if sys.argv[1].endswith('.py'):
+            test_pat = sys.argv[1]
+        else:
+            test_pat = sys.argv[1] + '.py'
+    else:
+        test_pat = '*.py'
+
+    if 'SBL_KEY_DIR' not in os.environ:
+        os.environ['SBL_KEY_DIR'] = "SblKeys/"
+
+    # check QEMU SlimBootloader.bin
+    sbl_img  = 'SlimBoot/Outputs/qemu/SlimBootloader.bin'
+    tst_img  = 'Outputs/SlimBootloader.bin'
+    if not os.path.exists(sbl_img):
+        print ('Could not find QEMU SlimBootloader.bin image !')
+        return -1
+
+    disk_dir = 'Disk'
+    out_dir  = 'Outputs'
+    if not os.path.exists(disk_dir):
+        os.mkdir(disk_dir)
+
+
+    # run test cases
+    test_cases = [
+      #('sbl_upld.py',  [tst_img, disk_dir, 'uboot_32'], 'Uboot.elf'),
+      ('sbl_upld.py',  [tst_img, disk_dir, 'linux_32'], 'LinuxPld32.elf'),
+      #('sbl_upld.py',  [tst_img, disk_dir, 'linux_64'], 'LinuxPld64.elf'),
+      #('sbl_upld.py',  [tst_img, disk_dir, 'uefi_32'], 'UefiPld32.elf'),
+      #('sbl_upld.py',  [tst_img, disk_dir, 'uefi_64'], 'UefiPld64.elf'),
+    ]
+
+    test_cnt = 0
+    for test_file, test_args, upld_img in test_cases:
+        filtered = fnmatch.filter([test_file], test_pat)
+        if len(filtered) == 0:
+            continue
+
+        print ('######### Running run test %s' % test_file)
+        # create new IFWI using the upld
+        cmd = [ sys.executable, 'Script/upld_swap.py', '-i', sbl_img, '-p', 'Outputs/%s' % upld_img, '-o', out_dir]
+        run_process (cmd)
+
+        # run QEMU test cases
+        cmd = [ sys.executable, 'Script/%s' % test_file] + test_args
+        try:
+            output = subprocess.run (cmd)
+            output.check_returncode()
+        except subprocess.CalledProcessError:
+            print ('Failed to run test %s !' % test_file)
+            return -3
+        print ('######### Completed test %s\n\n' % test_file)
+        test_cnt += 1
+
+    print ('\nAll %d test cases passed !\n' % test_cnt)
+
+    return 0
+
+
+def build_images ():
 
     if os.name != 'posix':
         fatal ('Only Linux is supported!')
@@ -141,6 +203,17 @@ def main ():
     run_process (cmd.split(' '))
     cmd = objcopy + " -I elf64-x86-64 -O elf64-x86-64 --set-section-alignment .upld.kernel=256 --set-section-alignment .upld.initrd=4096 --set-section-alignment .upld.cmdline=16 --set-section-alignment .upld.info=16 %s/LinuxPld64.elf" % (out_dir)
     run_process (cmd.split(' '))
+
+    return 0
+
+
+def main ():
+
+    if build_images ():
+        return 1
+
+    if qemu_test ():
+        return 2
 
     return 0
 
