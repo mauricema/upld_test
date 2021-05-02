@@ -129,7 +129,7 @@ def qemu_test ():
 
     # run test cases
     test_cases = [
-      #('sbl_upld.py',  [tst_img, disk_dir, 'uboot_32'], 'Uboot.elf'),
+      ('sbl_upld.py',  [tst_img, disk_dir, 'uboot_32'], 'UbootPld.elf'),
       ('sbl_upld.py',  [tst_img, disk_dir, 'linux_32'], 'LinuxPld32.elf'),
       ('sbl_upld.py',  [tst_img, disk_dir, 'linux_64'], 'LinuxPld64.elf'),
       ('sbl_upld.py',  [tst_img, disk_dir, 'uefi_32'], 'UefiPld32.elf'),
@@ -164,15 +164,9 @@ def qemu_test ():
 
 
 def build_sbl_images (dir_dict):
-
-    if os.name != 'posix':
-        fatal ('Only Linux is supported!')
-
     out_dir = dir_dict['out']
-    if not os.path.exists(out_dir):
-        os.mkdir(out_dir)
-
     sbl_dir = dir_dict['sbl']
+
     clone_repo  (sbl_dir, 'https://github.com/universalpayload/slimbootloader.git', 'upld_elf')
     shutil.copy ('QemuFspBins/Fsp.bsf', '%s/Silicon/QemuSocPkg/FspBin/Fsp.bsf' % sbl_dir)
     shutil.copy ('QemuFspBins/FspRel.bin', '%s/Silicon/QemuSocPkg/FspBin/FspRel.bin' % sbl_dir)
@@ -183,6 +177,11 @@ def build_sbl_images (dir_dict):
     if ret:
         fatal ('Failed to build SBL!')
 
+    return 0
+
+def build_linux_images (dir_dict):
+    out_dir = dir_dict['out']
+    sbl_dir = dir_dict['sbl']
     objcopy = get_objcopy()
 
     # Build Linux Payload 32
@@ -199,7 +198,6 @@ def build_sbl_images (dir_dict):
     run_process (cmd.split(' '))
     cmd = objcopy + " -I elf32-i386 -O elf32-i386 --set-section-alignment .upld.kernel=256 --set-section-alignment .upld.initrd=4096 --set-section-alignment .upld.cmdline=16 --set-section-alignment .upld.info=16 %s/LinuxPld32.elf" % (out_dir)
     run_process (cmd.split(' '))
-
 
     # Build Linux Payload 64
     cmd = 'python BuildLoader.py build_dsc -a x64 -p UniversalPayloadPkg/UniversalPayloadPkg.dsc'
@@ -219,10 +217,30 @@ def build_sbl_images (dir_dict):
     return 0
 
 
-
-def build_uefi_images (dir_dict):
+def build_uboot_images (dir_dict):
+    out_dir = dir_dict['out']
     objcopy = get_objcopy()
 
+    # Copy u-boot image
+    shutil.copy ('UbootBin/u-boot', '%s/UbootPld.elf' % out_dir)
+    cmd = 'strip --strip-unneeded %s/UbootPld.elf' % out_dir
+    run_process (cmd.split(' '))
+
+    # Inject sections
+    cmd = 'python Script/upld_info.py %s/upld_info.bin u-boot' % out_dir
+    run_process (cmd.split(' '))
+
+    cmd = objcopy + " -I elf32-i386 -O elf32-i386 --add-section .upld_info=%s/upld_info.bin %s/UbootPld.elf" % (out_dir, out_dir)
+    run_process (cmd.split(' '))
+    cmd = objcopy + " -I elf32-i386 -O elf32-i386 --set-section-alignment .upld_info=16 %s/UbootPld.elf" % (out_dir)
+    run_process (cmd.split(' '))
+
+    return 0
+
+
+
+def build_uefi_images (dir_dict):
+    objcopy  = get_objcopy()
     out_dir  = dir_dict['out']
     uefi_dir = dir_dict['uefi']
     clone_repo  (uefi_dir, 'https://github.com/universalpayload/edk2.git', 'upld_elf')
@@ -252,24 +270,34 @@ def build_uefi_images (dir_dict):
 
     return 0
 
-
 def main ():
     dir_dict = {}
     dir_dict['out']  = 'Outputs'
     dir_dict['sbl']  = 'SlimBoot'
     dir_dict['uefi'] = 'UefiPayload'
 
-    if build_sbl_images (dir_dict):
+    if os.name != 'posix':
+        fatal ('Only Linux is supported!')
+
+    if not os.path.exists(dir_dict['out']):
+        os.mkdir(dir_dict['out'])
+
+    if build_uboot_images (dir_dict):
         return 1
 
-    if build_uefi_images (dir_dict):
+    if build_sbl_images (dir_dict):
         return 2
 
-    if qemu_test ():
+    if build_linux_images (dir_dict):
         return 3
 
-    return 0
+    if build_uefi_images (dir_dict):
+        return 4
 
+    if qemu_test ():
+        return 5
+
+    return 0
 
 if __name__ == '__main__':
     sys.exit(main())
