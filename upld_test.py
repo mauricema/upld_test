@@ -11,6 +11,7 @@ import sys
 import shutil
 import subprocess
 import fnmatch
+import argparse
 
 def fatal (msg):
     sys.stdout.flush()
@@ -102,14 +103,7 @@ def get_objcopy ():
     return objcopy
 
 
-def qemu_test ():
-    if len(sys.argv) > 1:
-        if sys.argv[1].endswith('.py'):
-            test_pat = sys.argv[1]
-        else:
-            test_pat = sys.argv[1] + '.py'
-    else:
-        test_pat = '*.py'
+def qemu_test (test_pat):
 
     if 'SBL_KEY_DIR' not in os.environ:
         os.environ['SBL_KEY_DIR'] = "SblKeys/"
@@ -132,15 +126,16 @@ def qemu_test ():
       ('sbl_upld.py',  [tst_img, disk_dir, 'uboot_32'], 'UbootPld.elf'),
       ('sbl_upld.py',  [tst_img, disk_dir, 'linux_32'], 'LinuxPld32.elf'),
       ('sbl_upld.py',  [tst_img, disk_dir, 'linux_64'], 'LinuxPld64.elf'),
-      ('sbl_upld.py',  [tst_img, disk_dir, 'uefi_32'], 'UefiPld32.elf'),
-      ('sbl_upld.py',  [tst_img, disk_dir, 'uefi_64'], 'UefiPld64.elf'),
+      ('sbl_upld.py',  [tst_img, disk_dir, 'uefi_32'],  'UefiPld32.elf'),
+      ('sbl_upld.py',  [tst_img, disk_dir, 'uefi_64'],  'UefiPld64.elf'),
     ]
 
     test_cnt = 0
     for test_file, test_args, upld_img in test_cases:
-        filtered = fnmatch.filter([test_file], test_pat)
-        if len(filtered) == 0:
-            continue
+        if test_pat:
+            filtered = fnmatch.filter([upld_img.lower()], test_pat)
+            if len(filtered) == 0:
+                continue
 
         print ('######### Running run test %s' % test_file)
         # create new IFWI using the upld
@@ -164,8 +159,8 @@ def qemu_test ():
 
 
 def build_sbl_images (dir_dict):
-    out_dir = dir_dict['out']
-    sbl_dir = dir_dict['sbl']
+    out_dir = dir_dict['out_dir']
+    sbl_dir = dir_dict['sbl_dir']
 
     clone_repo  (sbl_dir, 'https://github.com/universalpayload/slimbootloader.git', 'upld_elf')
     shutil.copy ('QemuFspBins/Fsp.bsf', '%s/Silicon/QemuSocPkg/FspBin/Fsp.bsf' % sbl_dir)
@@ -180,9 +175,9 @@ def build_sbl_images (dir_dict):
     return 0
 
 def build_linux_images (dir_dict):
-    out_dir = dir_dict['out']
-    sbl_dir = dir_dict['sbl']
-    objcopy = get_objcopy()
+    out_dir = dir_dict['out_dir']
+    sbl_dir = dir_dict['sbl_dir']
+    objcopy = dir_dict['objcopy_path']
 
     # Build Linux Payload 32
     cmd = 'python BuildLoader.py build_dsc -p UniversalPayloadPkg/UniversalPayloadPkg.dsc'
@@ -218,8 +213,8 @@ def build_linux_images (dir_dict):
 
 
 def build_uboot_images (dir_dict):
-    out_dir = dir_dict['out']
-    objcopy = get_objcopy()
+    out_dir = dir_dict['out_dir']
+    objcopy = dir_dict['objcopy_path']
 
     # Copy u-boot image
     shutil.copy ('UbootBin/u-boot', '%s/UbootPld.elf' % out_dir)
@@ -240,9 +235,9 @@ def build_uboot_images (dir_dict):
 
 
 def build_uefi_images (dir_dict):
-    objcopy  = get_objcopy()
-    out_dir  = dir_dict['out']
-    uefi_dir = dir_dict['uefi']
+    out_dir  = dir_dict['out_dir']
+    uefi_dir = dir_dict['uefi_dir']
+    objcopy  = dir_dict['objcopy_path']
     clone_repo  (uefi_dir, 'https://github.com/universalpayload/edk2.git', 'upld_elf')
 
     # Build UEFI
@@ -271,30 +266,38 @@ def build_uefi_images (dir_dict):
     return 0
 
 def main ():
-    dir_dict = {}
-    dir_dict['out']  = 'Outputs'
-    dir_dict['sbl']  = 'SlimBoot'
-    dir_dict['uefi'] = 'UefiPayload'
+    dir_dict = {
+                  'out_dir'      : 'Outputs',
+                  'sbl_dir'      : 'SlimBoot',
+                  'uefi_dir'     : 'UefiPayload',
+                  'objcopy_path' : get_objcopy(),
+               }
+
+    arg_parse  = argparse.ArgumentParser()
+    arg_parse.add_argument('-sb',   dest='skip_build', action='store_true', help='Specify name pattern for payloads to be built')
+    arg_parse.add_argument('-t',   dest='test',  type=str, help='Specify name pattern for payloads to be tested', default = '')
+    args = arg_parse.parse_args()
 
     if os.name != 'posix':
         fatal ('Only Linux is supported!')
 
-    if not os.path.exists(dir_dict['out']):
-        os.mkdir(dir_dict['out'])
+    if not os.path.exists(dir_dict['out_dir']):
+        os.mkdir(dir_dict['out_dir'])
 
-    if build_uboot_images (dir_dict):
-        return 1
+    if not args.skip_build:
+        if build_uboot_images (dir_dict):
+            return 1
 
-    if build_sbl_images (dir_dict):
-        return 2
+        if build_sbl_images (dir_dict):
+            return 2
 
-    if build_linux_images (dir_dict):
-        return 3
+        if build_linux_images (dir_dict):
+            return 3
 
-    if build_uefi_images (dir_dict):
-        return 4
+        if build_uefi_images (dir_dict):
+            return 4
 
-    if qemu_test ():
+    if qemu_test (args.test):
         return 5
 
     return 0
