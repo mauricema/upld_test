@@ -56,7 +56,7 @@ def swap_payload (args):
 
     layout = [
       "( 'EPLD', 'EPLD.bin'      , 'NORMAL'  , 'RSA3072_PSS_SHA2_384'  , 'KEY_ID_CONTAINER_RSA3072'      , 0x10      , 0         , 0x0       ),"
-      "( 'UELF', '%s'  , 'Lzma'  , 'SHA2_384'              , ''                              , 0x10      , 0         , 0x0       )," % args.payload_bin
+      "( 'UPLD', '%s'  , 'Lzma'  , 'SHA2_384'              , ''                              , 0x10      , 0         , 0x0       )," % args.payload_bin
     ]
 
     gen_file_from_object ( out_dir + '/EPLD.txt', '\n'.join(layout).encode())

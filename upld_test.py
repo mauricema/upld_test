@@ -162,7 +162,7 @@ def build_sbl_images (dir_dict):
     out_dir = dir_dict['out_dir']
     sbl_dir = dir_dict['sbl_dir']
 
-    clone_repo  (sbl_dir, 'https://github.com/universalpayload/slimbootloader.git', 'upld_elf')
+    clone_repo  (sbl_dir, 'https://github.com/universalpayload/slimbootloader.git', 'universal_payload')
     shutil.copy ('QemuFspBins/Fsp.bsf', '%s/Silicon/QemuSocPkg/FspBin/Fsp.bsf' % sbl_dir)
     shutil.copy ('QemuFspBins/FspRel.bin', '%s/Silicon/QemuSocPkg/FspBin/FspRel.bin' % sbl_dir)
 

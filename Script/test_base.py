@@ -43,7 +43,7 @@ def run_qemu (bios_img, fwu_path, fwu_mode=False, timeout=0):
         "-serial", "mon:stdio",
         "-m", "256M", "-drive",
         "id=mydrive,if=none,format=raw,file=fat:rw:%s" % fwu_path, "-device",
-        "ide-hd,drive=mydrive", "-boot", "order=d%s" % ('an' if fwu_mode else ''),
+        "ide-hd,drive=mydrive", "-boot", "order=%s" % ('dan' if fwu_mode else 'abd'),
         "-no-reboot", "-drive", "file=%s,if=pflash,format=raw" % bios_img
     ]
 
